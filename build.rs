@@ -6,6 +6,14 @@ fn main() {
     println!("cargo:rerun-if-changed=ffi/webgpu-headers/webgpu.h");
     println!("cargo:rerun-if-changed=ffi/wgpu.h");
 
+    bindgen();
+}
+
+#[cfg(not(target_os = "ios"))]
+fn bindgen() {}
+
+#[cfg(target_os = "ios")]
+fn bindgen() {
     #[rustfmt::skip]
     let types_to_rename = vec![
         ("WGPUAdapter", "WGPUAdapterImpl"),
