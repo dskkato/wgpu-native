@@ -120,6 +120,53 @@ jobs:
           name: dist
 
   # -----
+  linux-armv7:
+    # Config
+    name: release - linux-armv7
+    runs-on: ubuntu-latest
+    env:
+      TARGET: armv7-unknown-linux-gnu
+      ARCHIVE_NAME: wgpu-linux-armv7
+      TOOLCHAIN: stable-armv7-unknown-linux-gnu
+      IMAGE: manylinux2014_armv7l
+    steps:
+      # Common part (same for nearly each build)
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Set WGPU_NATIVE_VERSION
+        run: echo "WGPU_NATIVE_VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+        shell: bash
+      # prepare qemu for cross-compilation
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+      # Build
+      - name: Build
+        run: |
+          CID=$(docker create --platform linux/arm/v7 -t -w /tmp/wgpu-native -v $PWD:/tmp/src:ro -e TARGET -e ARCHIVE_NAME -e WGPU_NATIVE_VERSION quay.io/pypa/$IMAGE bash -c "\
+            cp -r /tmp/src/. . && \
+            rm -rf ./dist && \
+            export PATH=/root/.cargo/bin:\$PATH && \
+            export USER=root && \
+            curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none && \
+            rustup toolchain install --no-self-update $TOOLCHAIN && \
+            rustup default $TOOLCHAIN && \
+            yum install zip -y && \
+            make package")
+          docker start -ai $CID
+          mkdir -p dist
+          docker cp $CID:/tmp/wgpu-native/dist/. dist/.
+          docker rm $CID
+      # Upload (same for each build)
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          path: dist
+          name: dist
+
+  # -----
   windows-x86_64:
     # Config
     name: release - windows-x86_64
@@ -267,7 +314,7 @@ jobs:
   publish:
     name: Publish Github release
     needs:
-      [linux-x86_64, linux-aarch64, windows-x86_64, windows-i686, macos-x86_64, macos-aarch64]
+      [linux-x86_64, linux-aarch64, linux-armv7, windows-x86_64, windows-i686, macos-x86_64, macos-aarch64]
     runs-on: ubuntu-latest
     if: success() && contains(github.ref, 'tags/v')
     steps:
